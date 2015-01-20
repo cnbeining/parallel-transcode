@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 #coding:utf-8
-# Author:   --<>
-# Purpose: 
+# Author: Beining  --<ACICFG>
+# Purpose: Parallel-Transcode a file.
 # Created: 11/05/2014
 
 
@@ -20,39 +20,20 @@ import Queue
 import time
 import traceback
 
-logging.basicConfig(level = logging.INFO)
-
-
-global basedir
+global basedir, tmpdir, arguments, segment_cutted_dir, segment_converted, segment_converted_dir, INPUT_FILE, SEG_TIME, IS_ERROR, DELETE, full_command
 basedir = os.getcwd()
-global tmpdir
 #tmpdir = './multi-encode-' + str(uuid.uuid4())
 tmpdir = '.'
-global arguments
 arguments = ''
-global segment_cutted
-segment_cutted = []
-global segment_cutted_dir
 segment_cutted_dir = tmpdir + '/segment_cutted_dir'
-global segment_cutted_error
-segment_cutted_error = []
-global segment_converted
 segment_converted = []
-global segment_converted_dir
 segment_converted_dir = tmpdir + '/segment_converted_dir'
-global segment_converted_error
-segment_converted_error = []
-global INPUT_FILE
 INPUT_FILE = ''
-global SEG_TIME
 SEG_TIME = 60
-global IS_ERROR
 IS_ERROR = 0
-global DELETE
 DELETE = 1
-global full_command
 full_command = ''
-
+logging.basicConfig(level = logging.INFO)
 
 
 #----------------------------------------------------------------------
@@ -135,13 +116,8 @@ def cut_one_segment(start_time, input_file = INPUT_FILE, step_time = SEG_TIME):
         return start_time
     else:
         #ffmpeg exit with error
-        logging.warning('Segment cut failed! Start time at {start_time}'.format(start_time = start_time))
+        #logging.warning('Segment cut failed! Start time at {start_time}'.format(start_time = start_time))
         return -1
-    #if stop_time != 0:
-        #os.system('ffmpeg -i \'' + input_file + '\' -ss ' + start_time + ' -t ' + stop_time + ' ' + tmpdir+' + /part' + str(part_num) + '.'+ original_extname)
-    #else:
-        #os.system('ffmpeg -i \'' + input_file + '\' -ss ' + start_time + ' ' + tmpdir+' + /part' + str(part_num) + '.'+ original_extname)
-
 
 #----------------------------------------------------------------------
 def convert_one_segment(start_time, arguments, full_command = ''):
@@ -169,18 +145,12 @@ def convert_one_segment(start_time, arguments, full_command = ''):
         return start_time
     else:
         #ffmpeg exit with error
-        logging.warning('Segment convert failed! Start time at {start_time}'.format(start_time = start_time))
+        #logging.warning('Segment convert failed! Start time at {start_time}'.format(start_time = start_time))
         return -1
 
 #----------------------------------------------------------------------
-def test_if_convert_success():
-    """"""
-    return len(segment_converted) == len(segment_list)
-
-
-#----------------------------------------------------------------------
 def concat_file(time_list = segment_converted, filename = 'video_to_convert'):
-    """"""
+    """From: Biligrab"""
     os.chdir(basedir)
     f = open('ff.txt', 'w')
     ff = ''
@@ -205,9 +175,6 @@ def concat_file(time_list = segment_converted, filename = 'video_to_convert'):
         #ffmpeg exit with error
         logging.warning('Concat failed')
 
-
-
-
 ########################################################################
 class CutVideo(threading.Thread):
     """Threaded Cut Video"""
@@ -220,22 +187,20 @@ class CutVideo(threading.Thread):
     #----------------------------------------------------------------------
     def run(self):
         while True:
+            if out_queue.full():
+                pass
             #grabs start time from queue
             start_time = self.queue.get()
-            
             return_value = cut_one_segment(start_time, input_file=INPUT_FILE, 
                                           step_time=SEG_TIME)
-            
             if return_value == -1:
                 global IS_ERROR
                 #Error return code
-                #logging.warning('[*] Segment Slicing Failed: Start time {start_time}'.format(start_time = start_time))
+                logging.warning('[*] Segment Slicing Failed: Start time {start_time}'.format(start_time = start_time))
                 IS_ERROR += 1
             else:
                 self.out_queue.put(return_value)
                 pass
-            
-            
             #signals to queue job is done
             self.queue.task_done()
 
@@ -252,7 +217,6 @@ class ConvertThread(threading.Thread):
         while True:
             #grabs time from queue
             start_time = self.out_queue.get()
-            
             return_value = convert_one_segment(start_time, arguments = arguments, full_command = full_command)
             if return_value == -1:
                 #Error return code
@@ -261,7 +225,6 @@ class ConvertThread(threading.Thread):
             else:
                 segment_converted.append(start_time)
                 pass
-            
             self.out_queue.task_done()
 
 #----------------------------------------------------------------------
@@ -276,17 +239,15 @@ def main(INPUT_FILE, slicer_thread = 3, converter_thread = 3):
     logging.info('Probing the file...')
     input_file_length = time_to_sec(get_file_time(INPUT_FILE))
     start_time_list = make_segment_list(input_file_length, SEG_TIME)
-    logging.info('Start the threading!')
+    logging.info('Start threading!')
     global queue
     global out_queue
-    queue = Queue.Queue(int(slicer_thread))
-    out_queue = Queue.Queue()
-    main_threading(start_time_list=start_time_list, slicer_thread=3, 
-                  converter_thread=3)
+    queue = Queue.Queue()
+    out_queue = Queue.Queue(int(queue_length))
+    main_threading(start_time_list=start_time_list, slicer_thread=slicer_thread, 
+                  converter_thread=slicer_thread)
     queue.join()
     out_queue.join()
-    print(sorted(segment_converted))
-    print(start_time_list)
     if sorted(segment_converted) != start_time_list:
         logging.fatal('Queue ERROR!')
         exit()
@@ -304,7 +265,7 @@ def main(INPUT_FILE, slicer_thread = 3, converter_thread = 3):
 
 #----------------------------------------------------------------------
 def main_threading(start_time_list = [], slicer_thread = 3, converter_thread = 3):
-
+    """"""
     #spawn a pool of threads, and pass them queue instance
     for i in range(int(slicer_thread)):
         t = CutVideo(queue, out_queue)
@@ -317,7 +278,6 @@ def main_threading(start_time_list = [], slicer_thread = 3, converter_thread = 3
     #populate queue with data
     for start_time in start_time_list:
         queue.put(start_time)
-        
     #wait on the queue until everything has been processed
     queue.join()
     out_queue.join()
@@ -332,7 +292,6 @@ def usage():
     http://www.cnbeining.com/
     
     Beining@ACICFG
-    
     
     
     Usage:
@@ -371,12 +330,13 @@ def usage():
         If set to 0, Parallel-Transcode will not delete any temporary files.
         1: Only delete at the end of stage.
         2: Delete on the fly.
-    
+        
+            
+    -t: Default: 30
+        The time of one segment in sec.
 ''')
 
-
-
-
+#----------------------------------------------------------------------
 if __name__=='__main__':
     argv_list = sys.argv[1:]
     try:
