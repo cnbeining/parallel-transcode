@@ -29,7 +29,7 @@ Python 2.7+ffprobe+ffmpeg+whatever-you-want
     python multi-ffmpeg.py (-h/help) (-i/input-file) (-s/slicer)
                            (-c/converter) (-q/queue-length)
                            (-a/arguments) (-f/full_command)
-                           (-d/delete-temp)
+                           (-d/delete-temp) (-t/segment-time)
     
     -h: Default: None
         Print this usage file.
@@ -60,6 +60,9 @@ Python 2.7+ffprobe+ffmpeg+whatever-you-want
         If set to 0, Parallel-Transcode will not delete any temporary files.
         1: Only delete at the end of stage.
         2: Delete on the fly.
+    
+    -t: Default: 30
+        The time of one segment in sec.
 
 License
 ----
