@@ -46,7 +46,6 @@ Python 2.7+ffprobe+ffmpeg+whatever-you-want
         
     -q: Default: 10
         Max pieces.
-        TODO
     
     -a: Default: None
         The arguments you want to pass to ffmpeg when encoding.
@@ -63,6 +62,11 @@ Python 2.7+ffprobe+ffmpeg+whatever-you-want
     
     -t: Default: 30
         The time of one segment in sec.
+           
+    -v: Default: (Blank)
+        The temporary file's format.
+        If set to "avc", Parallel-Transcode will use a *loseless* way to transcode file to reserve its quality.
+        It not set, the temporary file would be in MPEG2, same quality. There's no guarantee that this is loseless.
 
 License
 ----
@@ -82,6 +86,8 @@ Misc
 
 History
 ----
+
+0.03: Add another mode of making cache file to reach quicker speed(6X on my machine, 13-late MBP).
 
 0.02: Fix queue length.
 

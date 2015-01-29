@@ -6,7 +6,7 @@
 
 
 import sys
-import unittest
+#import unittest
 import os
 from multiprocessing import Pool
 from multiprocessing.dummy import Pool as ThreadPool
@@ -20,7 +20,7 @@ import Queue
 import time
 import traceback
 
-global basedir, tmpdir, arguments, segment_cutted_dir, segment_converted, segment_converted_dir, INPUT_FILE, SEG_TIME, IS_ERROR, DELETE, full_command
+global basedir, tmpdir, arguments, segment_cutted_dir, segment_converted, segment_converted_dir, INPUT_FILE, SEG_TIME, IS_ERROR, DELETE, full_command, VIDEO_FORMAT
 basedir = os.getcwd()
 #tmpdir = './multi-encode-' + str(uuid.uuid4())
 tmpdir = '.'
@@ -33,6 +33,7 @@ SEG_TIME = 60
 IS_ERROR = 0
 DELETE = 1
 full_command = ''
+VIDEO_FORMAT = ''  #MPEG2
 logging.basicConfig(level = logging.INFO)
 
 
@@ -96,7 +97,7 @@ def make_segment_list(input_file_length, step):
         return [i * step for i in range(int(input_file_length / step) + 1)]
 
 #----------------------------------------------------------------------
-def cut_one_segment(start_time, input_file = INPUT_FILE, step_time = SEG_TIME):
+def cut_one_segment(start_time, video_format = '', input_file = INPUT_FILE, step_time = SEG_TIME):
     """str,int,int,int-> None(File)
     start/stop time in sec, int.
     Input file should be readble by ffmpeg.
@@ -108,7 +109,10 @@ def cut_one_segment(start_time, input_file = INPUT_FILE, step_time = SEG_TIME):
     #Dont need since we will do a convert into loseless h264 format
     logging.info('Cutting original file piece, start at {start_time}...'.format(start_time = start_time))
     # Test shows that ffmpeg is able to handle the time
-    command = 'ffmpeg -i {input_file} -c:v libx264 -an -preset ultrafast -qp 0 -ss {start_time} -t {step_time} {segment_cutted_dir}/{start_time}.mp4'.format(input_file = input_file, start_time = start_time, step_time = step_time, segment_cutted_dir = segment_cutted_dir)
+    if video_format == 'avc':
+        command = 'ffmpeg -i {input_file} -c:v libx264 -an -preset ultrafast -qp 0 -ss {start_time} -t {step_time} -y {segment_cutted_dir}/{start_time}.mp4'.format(input_file = input_file, start_time = start_time, step_time = step_time, segment_cutted_dir = segment_cutted_dir)
+    else:
+        command = 'ffmpeg -i {input_file} -f mpeg -q:v 0 -y  -an -ss {start_time} -t {step_time} {segment_cutted_dir}/{start_time}.mp4'.format(input_file = input_file, start_time = start_time, step_time = step_time, segment_cutted_dir = segment_cutted_dir)
     #print(command)
     if subprocess.call(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE) == 0:
         #If ffmpeg return no error
@@ -128,7 +132,7 @@ def convert_one_segment(start_time, arguments, full_command = ''):
     input_segment_file = '{segment_cutted_dir}/{start_time}.mp4'.format(segment_cutted_dir = segment_cutted_dir, start_time = start_time)
     ouput_segment_file = '{segment_converted_dir}/{start_time}_h264.mp4'.format(segment_converted_dir = segment_converted_dir, start_time = start_time)
     if full_command == '':
-        command = 'ffmpeg -i {INPUT_SEGMENT_FILE} {arguments} {OUPUT_SEGMENT_FILE}'.format(INPUT_SEGMENT_FILE = input_segment_file, OUPUT_SEGMENT_FILE = ouput_segment_file, arguments = arguments)
+        command = 'ffmpeg -i {INPUT_SEGMENT_FILE} {arguments} -y {OUPUT_SEGMENT_FILE}'.format(INPUT_SEGMENT_FILE = input_segment_file, OUPUT_SEGMENT_FILE = ouput_segment_file, arguments = arguments)
     else:
         command = full_command.format(INPUT_SEGMENT_FILE = input_segment_file, OUPUT_SEGMENT_FILE = ouput_segment_file)
     #os.system('x264 -i {start_time}.mkv {arguments}'.format(arguments = arguments))
@@ -191,7 +195,8 @@ class CutVideo(threading.Thread):
                 pass
             #grabs start time from queue
             start_time = self.queue.get()
-            return_value = cut_one_segment(start_time, input_file=INPUT_FILE, 
+            return_value = cut_one_segment(start_time, video_format=VIDEO_FORMAT, 
+                                          input_file=INPUT_FILE, 
                                           step_time=SEG_TIME)
             if return_value == -1:
                 global IS_ERROR
@@ -298,8 +303,8 @@ def usage():
     
     python multi-ffmpeg.py (-h/help) (-i/input-file) (-s/slicer)
                            (-c/converter) (-q/queue-length)
-                           (-a/arguments) (-f/full_command)
-                           (-d/delete-temp)
+                           (-a/arguments) (-f/full-command)
+                           (-d/delete-temp) (-v/video-format)
     
     -h: Default: None
         Print this usage file.
@@ -315,8 +320,8 @@ def usage():
         The thread number of Converter that convert the file into pieces.
         
     -q: Default: 10
-        Max pieces.
-        TODO
+        Max pieces to control cache size.
+        Wrongly set may lead to dramatic decrease of speed or running out of space!
     
     -a: Default: None
         The arguments you want to pass to ffmpeg when encoding.
@@ -330,18 +335,22 @@ def usage():
         If set to 0, Parallel-Transcode will not delete any temporary files.
         1: Only delete at the end of stage.
         2: Delete on the fly.
-        
             
     -t: Default: 30
         The time of one segment in sec.
+        
+    -v: Default: (Blank)
+        The temporary file's format.
+        If set to "avc", Parallel-Transcode will use a *loseless* way to transcode file to reserve its quality.
+        It not set, the temporary file would be in MPEG2, same quality. There's no guarantee that this is loseless.
 ''')
 
 #----------------------------------------------------------------------
 if __name__=='__main__':
     argv_list = sys.argv[1:]
     try:
-        opts, args = getopt.getopt(argv_list, "hi:s:c:q:t:a:f:d:",
-                                   ['help', "input-file=", 'slicer=', 'converter=', 'queue-length=', 'segment-time=', 'arguments=', 'full_command=', 'delete-temp='])
+        opts, args = getopt.getopt(argv_list, "hi:s:c:q:t:a:f:d:v:",
+                                   ['help', "input-file=", 'slicer=', 'converter=', 'queue-length=', 'segment-time=', 'arguments=', 'full-command=', 'delete-temp=', 'video-format='])
     except getopt.GetoptError:
         usage()
         exit()
@@ -361,9 +370,11 @@ if __name__=='__main__':
             SEG_TIME = int(a)
         if o in ('-a', '--arguments'):
             arguments = a
-        if o in ('-f', '--full_command'):
+        if o in ('-f', '--full-command'):
             full_command = a
         if o in ('-d', '--delete-temp'):
             DELETE = int(a)
+        if o in ('-v', '--video-format'):
+            VIDEO_FORMAT = a
     main(INPUT_FILE, slicer_thread=slicer_thread, 
             converter_thread=converter_thread)
