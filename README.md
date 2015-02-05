@@ -67,6 +67,15 @@ Python 2.7+ffprobe+ffmpeg+whatever-you-want
         The temporary file's format.
         If set to "avc", Parallel-Transcode will use a *loseless* way to transcode file to reserve its quality.
         It not set, the temporary file would be in MPEG2, same quality. There's no guarantee that this is loseless.
+        
+    -r: Default: 15
+        Used with "-v avc".
+        The crf to use when convert.
+        0 for loseless.
+    
+    -n: Default: 0
+        Dry run.
+        Convert first N piece to test whether the script is running properly.
 
 License
 ----
@@ -86,6 +95,7 @@ Misc
 
 History
 ----
+0.04: Able to do a test dry run.
 
 0.03: Add another mode of making cache file to reach quicker speed(6X on my machine, 13-late MBP).
 
